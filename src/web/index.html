@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交易链路延时分析</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-100">
+    <!-- 顶部导航 -->
+    <nav class="bg-blue-600 text-white p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">🔍 交易链路延时分析</h1>
+            <div class="space-x-4">
+                <button onclick="showSection('dashboard')" class="hover:bg-blue-700 px-3 py-2 rounded">仪表盘</button>
+                <button onclick="showSection('data')" class="hover:bg-blue-700 px-3 py-2 rounded">数据浏览</button>
+                <button onclick="showSection('analysis')" class="hover:bg-blue-700 px-3 py-2 rounded">分析</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <div class="container mx-auto p-6">
+        <!-- 筛选面板 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">📊 数据筛选</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">开始日期</label>
+                    <input type="date" id="start-date" class="w-full border rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">结束日期</label>
+                    <input type="date" id="end-date" class="w-full border rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">柜台</label>
+                    <select id="counter-select" class="w-full border rounded px-3 py-2">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="loadData()" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                        🔍 查询
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 仪表盘 -->
+        <div id="dashboard-section" class="space-y-6">
+            <!-- 统计卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-sm text-gray-500">总数据量</h3>
+                    <p id="total-rows" class="text-2xl font-bold text-blue-600">-</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-sm text-gray-500">平均延时</h3>
+                    <p id="avg-latency" class="text-2xl font-bold text-green-600">-</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-sm text-gray-500">P95 延时</h3>
+                    <p id="p95-latency" class="text-2xl font-bold text-yellow-600">-</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-sm text-gray-500">异常数量</h3>
+                    <p id="anomaly-count" class="text-2xl font-bold text-red-600">-</p>
+                </div>
+            </div>
+
+            <!-- 图表区 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">延时分布</h3>
+                    <div id="latency-histogram" class="h-80"></div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">延时时间序列</h3>
+                    <div id="latency-timeseries" class="h-80"></div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">柜台对比</h3>
+                    <div id="counter-boxplot" class="h-80"></div>
+                </div>
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">TGW Back vs Out</h3>
+                    <div id="back-out-scatter" class="h-80"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据浏览 -->
+        <div id="data-section" class="hidden">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">数据预览</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr id="table-header"></tr>
+                        </thead>
+                        <tbody id="table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分析 -->
+        <div id="analysis-section" class="hidden">
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4">异常检测</h3>
+                <button onclick="runAnomalyDetection()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+                    🚨 运行异常检测
+                </button>
+                <div id="anomaly-results" class="mt-4"></div>
+            </div>
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">聚类分析</h3>
+                <button onclick="runClustering()" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
+                    🔗 运行聚类分析
+                </button>
+                <div id="cluster-results" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载动画 -->
+    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white rounded-lg p-8">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p class="mt-4 text-gray-600">加载中...</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
