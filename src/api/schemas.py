@@ -4,7 +4,7 @@ API 数据模型
 使用 Pydantic 定义请求和响应模型
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 
@@ -15,6 +15,16 @@ class DataQueryRequest(BaseModel):
     end_date: date
     counters: Optional[List[str]] = None
     columns: Optional[List[str]] = None
+    
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def validate_date(cls, value):
+        """验证日期类型"""
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        elif isinstance(value, datetime):
+            return value.date()
+        return value
 
 
 class DataQueryResponse(BaseModel):
@@ -31,6 +41,16 @@ class LatencyAnalysisRequest(BaseModel):
     start_date: date
     end_date: date
     counter: Optional[str] = None
+    
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def validate_date(cls, value):
+        """验证日期类型"""
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        elif isinstance(value, datetime):
+            return value.date()
+        return value
 
 
 class LatencyStats(BaseModel):
