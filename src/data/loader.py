@@ -6,6 +6,7 @@
 
 import polars as pl
 from pathlib import Path
+from datetime import timedelta
 from typing import List, Optional
 from datetime import date
 
@@ -74,7 +75,8 @@ class ParquetLoader:
                 dfs.append(df)
             except FileNotFoundError:
                 pass
-            current = pl.select(pl.lit(current).dt.offset_by("1d")).to_series()[0].date()
+            # 修复：去掉 .date() 调用，直接使用 timedelta
+            current = current + timedelta(days=1)
         
         if not dfs:
             raise ValueError("指定范围内没有找到数据文件")
