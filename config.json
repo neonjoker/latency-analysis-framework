@@ -1,0 +1,24 @@
+{
+  "data_folders": {
+    "allowed_roots": [],
+    "forbidden_dirs": [
+      "C:\\Windows",
+      "C:\\Program Files",
+      "C:\\Program Files (x86)",
+      "/System",
+      "/Library",
+      "/etc",
+      "/usr",
+      "/bin",
+      "/sbin"
+    ],
+    "default_path": ""
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 10737
+  },
+  "web": {
+    "port": 10738
+  }
+}
