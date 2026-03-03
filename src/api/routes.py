@@ -38,7 +38,7 @@ async def health_check():
 async def get_available_dates():
     """获取可用日期列表"""
     try:
-        loader = ParquetLoader()
+        loader = ParquetLoader(str(current_data_dir))
         dates = loader.get_available_dates()
         return {"success": True, "dates": [d.isoformat() for d in dates]}
     except Exception as e:
@@ -49,7 +49,7 @@ async def get_available_dates():
 async def get_available_counters():
     """获取可用柜台列表"""
     try:
-        loader = ParquetLoader()
+        loader = ParquetLoader(str(current_data_dir))
         # 读取一天的数据获取柜台列表
         dates = loader.get_available_dates()
         if not dates:
@@ -66,7 +66,7 @@ async def get_available_counters():
 async def query_data(request: DataQueryRequest):
     """查询数据"""
     try:
-        loader = ParquetLoader()
+        loader = ParquetLoader(str(current_data_dir))
         df = loader.load_date_range(request.start_date, request.end_date, request.columns)
         
         if request.counters:
@@ -92,7 +92,7 @@ async def query_data(request: DataQueryRequest):
 async def analyze_latency(request: LatencyAnalysisRequest):
     """延时分析"""
     try:
-        loader = ParquetLoader()
+        loader = ParquetLoader(str(current_data_dir))
         df = loader.load_date_range(request.start_date, request.end_date)
         
         if request.counter:
@@ -134,7 +134,7 @@ async def analyze_latency(request: LatencyAnalysisRequest):
 async def analyze_clustering(request: LatencyAnalysisRequest):
     """聚类分析"""
     try:
-        loader = ParquetLoader()
+        loader = ParquetLoader(str(current_data_dir))
         df = loader.load_date_range(request.start_date, request.end_date)
         
         analyzer = LatencyClusterAnalyzer()
@@ -160,7 +160,7 @@ async def analyze_clustering(request: LatencyAnalysisRequest):
 async def analyze_anomaly(request: LatencyAnalysisRequest):
     """异常检测"""
     try:
-        loader = ParquetLoader()
+        loader = ParquetLoader(str(current_data_dir))
         df = loader.load_date_range(request.start_date, request.end_date)
         
         detector = AnomalyDetector()
@@ -183,5 +183,143 @@ async def analyze_anomaly(request: LatencyAnalysisRequest):
                 for k, v in anomalies.items()
             }
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 数据文件夹管理 ====================
+
+import os
+from pathlib import Path
+
+# 允许的根目录
+ALLOWED_ROOT = Path("/mnt/f")
+
+# 当前数据目录（可动态修改）
+current_data_dir = Path("/mnt/f/latency_project")
+
+
+@router.get("/api/folders")
+async def get_available_folders():
+    """获取可用数据文件夹列表"""
+    try:
+        folders = []
+        
+        # 扫描 /mnt/f/ 下包含 parquet 文件的文件夹
+        if ALLOWED_ROOT.exists():
+            for item in ALLOWED_ROOT.iterdir():
+                if item.is_dir():
+                    try:
+                        parquet_count = len(list(item.glob("*.parquet")))
+                        if parquet_count > 0:
+                            folders.append({
+                                "name": item.name,
+                                "path": str(item),
+                                "parquet_count": parquet_count
+                            })
+                    except PermissionError:
+                        continue
+        
+        # 添加默认目录
+        default_folder = {
+            "name": "latency_project (默认)",
+            "path": str(Path("/mnt/f/latency_project")),
+            "parquet_count": len(list(Path("/mnt/f/latency_project").glob("*.parquet")))
+        }
+        folders.insert(0, default_folder)
+        
+        return {"success": True, "folders": folders}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/folders/validate")
+async def validate_folder(path: str):
+    """验证文件夹路径"""
+    try:
+        # 安全检查：防止路径遍历
+        full_path = Path(path).resolve()
+        
+        # 必须在 /mnt/f/ 下
+        if not str(full_path).startswith(str(ALLOWED_ROOT)):
+            return {
+                "success": False,
+                "valid": False,
+                "error": "路径必须在 /mnt/f/ 目录下"
+            }
+        
+        # 检查是否存在
+        if not full_path.exists():
+            return {
+                "success": True,
+                "valid": False,
+                "error": "文件夹不存在"
+            }
+        
+        # 检查是否是目录
+        if not full_path.is_dir():
+            return {
+                "success": True,
+                "valid": False,
+                "error": "不是目录"
+            }
+        
+        # 统计 parquet 文件
+        parquet_count = len(list(full_path.glob("*.parquet")))
+        
+        return {
+            "success": True,
+            "valid": True,
+            "path": str(full_path),
+            "parquet_count": parquet_count,
+            "message": f"找到 {parquet_count} 个 parquet 文件"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "valid": False,
+            "error": str(e)
+        }
+
+
+@router.get("/api/folders/current")
+async def get_current_folder():
+    """获取当前数据文件夹"""
+    return {
+        "success": True,
+        "path": str(current_data_dir),
+        "name": current_data_dir.name
+    }
+
+
+@router.post("/api/folders/set")
+async def set_current_folder(path: str):
+    """设置当前数据文件夹"""
+    global current_data_dir
+    
+    try:
+        # 验证路径
+        full_path = Path(path).resolve()
+        
+        if not str(full_path).startswith(str(ALLOWED_ROOT)):
+            raise HTTPException(status_code=400, detail="路径必须在 /mnt/f/ 目录下")
+        
+        if not full_path.exists() or not full_path.is_dir():
+            raise HTTPException(status_code=400, detail="文件夹不存在或不是目录")
+        
+        parquet_count = len(list(full_path.glob("*.parquet")))
+        if parquet_count == 0:
+            raise HTTPException(status_code=400, detail="文件夹中没有 parquet 文件")
+        
+        current_data_dir = full_path
+        
+        return {
+            "success": True,
+            "path": str(current_data_dir),
+            "name": current_data_dir.name,
+            "parquet_count": parquet_count
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

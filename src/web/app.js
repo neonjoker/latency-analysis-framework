@@ -1,17 +1,137 @@
 /**
  * 交易链路延时分析 - 前端应用
+ * 包含数据文件夹选择功能
  */
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'http://localhost:10737';
 
 // 全局状态
 let currentData = null;
+let currentFolder = null;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
+    loadFolders();
     initializeDates();
-    loadCounters();
 });
+
+// 加载文件夹列表
+async function loadFolders() {
+    try {
+        const response = await fetch(`${API_BASE}/api/folders`);
+        const data = await response.json();
+        
+        const select = document.getElementById('folder-select');
+        select.innerHTML = '';
+        
+        data.folders.forEach(folder => {
+            const option = document.createElement('option');
+            option.value = folder.path;
+            option.textContent = `${folder.name} (${folder.parquet_count} 个文件)`;
+            select.appendChild(option);
+        });
+        
+        // 设置默认值
+        if (data.folders.length > 0) {
+            currentFolder = data.folders[0].path;
+            select.value = currentFolder;
+            document.getElementById('folder-path').value = currentFolder;
+            showFolderInfo(`已加载 ${data.folders[0].parquet_count} 个数据文件`);
+        }
+    } catch (error) {
+        console.error('加载文件夹列表失败:', error);
+        showFolderInfo('加载文件夹列表失败', 'error');
+    }
+}
+
+// 刷新文件夹列表
+async function refreshFolders() {
+    showLoading(true);
+    await loadFolders();
+    showLoading(false);
+}
+
+// 文件夹选择变化
+async function onFolderChange() {
+    const select = document.getElementById('folder-select');
+    currentFolder = select.value;
+    document.getElementById('folder-path').value = currentFolder;
+    
+    // 自动刷新日期列表
+    await loadCounters();
+}
+
+// 验证文件夹
+async function validateFolder() {
+    const path = document.getElementById('folder-path').value;
+    
+    if (!path) {
+        showFolderInfo('请输入文件夹路径', 'error');
+        return;
+    }
+    
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE}/api/folders/validate?path=${encodeURIComponent(path)}`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success && result.valid) {
+            showFolderInfo(`✓ ${result.message}`, 'success');
+            currentFolder = result.path;
+        } else {
+            showFolderInfo(`✗ ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showFolderInfo(`验证失败：${error.message}`, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// 设置文件夹
+async function setFolder() {
+    const path = document.getElementById('folder-path').value;
+    
+    if (!path) {
+        alert('请输入文件夹路径');
+        return;
+    }
+    
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE}/api/folders/set?path=${encodeURIComponent(path)}`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            showFolderInfo(`✓ 已切换到 ${result.name} (${result.parquet_count} 个文件)`, 'success');
+            currentFolder = result.path;
+            
+            // 刷新日期和柜台列表
+            await loadFolders();
+            await loadCounters();
+        } else {
+            alert('设置失败：' + (result.detail || result.error));
+        }
+    } catch (error) {
+        alert('设置失败：' + error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// 显示文件夹信息
+function showFolderInfo(message, type = 'info') {
+    const info = document.getElementById('folder-info');
+    info.textContent = message;
+    info.className = `text-sm mt-2 ${
+        type === 'error' ? 'text-red-500' : 
+        type === 'success' ? 'text-green-500' : 'text-gray-500'
+    }`;
+}
 
 // 初始化日期选择器
 function initializeDates() {
@@ -29,12 +149,16 @@ async function loadCounters() {
         const data = await response.json();
         
         const select = document.getElementById('counter-select');
-        data.counters.forEach(counter => {
-            const option = document.createElement('option');
-            option.value = counter;
-            option.textContent = counter;
-            select.appendChild(option);
-        });
+        select.innerHTML = '<option value="">全部</option>';
+        
+        if (data.success && data.counters) {
+            data.counters.slice(0, 20).forEach(counter => {
+                const option = document.createElement('option');
+                option.value = counter;
+                option.textContent = counter;
+                select.appendChild(option);
+            });
+        }
     } catch (error) {
         console.error('加载柜台列表失败:', error);
     }
@@ -66,7 +190,11 @@ async function loadData() {
         const response = await fetch(`${API_BASE}/api/data/query`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ start_date: startDate, end_date: endDate, counters: counter ? [counter] : null })
+            body: JSON.stringify({ 
+                start_date: startDate, 
+                end_date: endDate, 
+                counters: counter ? [counter] : null 
+            })
         });
         
         const result = await response.json();
@@ -75,6 +203,8 @@ async function loadData() {
             currentData = result;
             updateDashboard(result);
             updateDataTable(result);
+        } else {
+            alert('查询失败：' + (result.detail || result.message));
         }
     } catch (error) {
         console.error('加载数据失败:', error);
