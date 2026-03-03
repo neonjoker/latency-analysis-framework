@@ -20,10 +20,16 @@ class DataQueryRequest(BaseModel):
     @classmethod
     def validate_date(cls, value):
         """验证日期类型"""
+        # 如果已经是 date 类型，直接返回（避免重复转换）
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        # 字符串转换为 date
         if isinstance(value, str):
             return date.fromisoformat(value)
-        elif isinstance(value, datetime):
+        # datetime 转换为 date
+        if isinstance(value, datetime):
             return value.date()
+        # 其他情况直接返回
         return value
 
 
@@ -46,10 +52,16 @@ class LatencyAnalysisRequest(BaseModel):
     @classmethod
     def validate_date(cls, value):
         """验证日期类型"""
+        # 如果已经是 date 类型，直接返回（避免重复转换）
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        # 字符串转换为 date
         if isinstance(value, str):
             return date.fromisoformat(value)
-        elif isinstance(value, datetime):
+        # datetime 转换为 date
+        if isinstance(value, datetime):
             return value.date()
+        # 其他情况直接返回
         return value
 
 
